@@ -7,8 +7,23 @@ import React, { useState, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 
-// Initialize Gemini API - Default instance
-let ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Gemini API instance (re-initialized when apiKey changes)
+let ai: GoogleGenAI | null = null;
+
+const MODELS = [
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { id: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash (Image)" },
+  { id: "gemini-2.5-flash-preview-tts", label: "Gemini 2.5 Flash (TTS)" },
+];
+
+function initAI(apiKey: string) {
+  ai = new GoogleGenAI({ apiKey });
+}
+
+// Load saved key from localStorage
+const savedKey = localStorage.getItem("saga_api_key") || "";
+const savedModel = localStorage.getItem("saga_model") || MODELS[0].id;
+if (savedKey) initAI(savedKey);
 
 const VOICES = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr"];
 
@@ -209,6 +224,68 @@ const WelcomePlaceholder = () => (
      </div>
   </div>
 );
+
+const SetupScreen = ({ onSave }: { onSave: (key: string, model: string) => void }) => {
+  const [key, setKey] = useState(savedKey);
+  const [model, setModel] = useState(savedModel);
+  const [showKey, setShowKey] = useState(false);
+
+  return (
+    <div className="setup-overlay">
+      <div className="setup-card">
+        <Logo />
+        <h1>Welcome to Saga</h1>
+        <p className="setup-subtitle">Connect your AI provider to get started</p>
+
+        <div className="setup-field">
+          <label>LLM Provider</label>
+          <select className="text-input" value="google" disabled>
+            <option value="google">Google Gemini</option>
+          </select>
+        </div>
+
+        <div className="setup-field">
+          <label>Model</label>
+          <select className="text-input" value={model} onChange={e => setModel(e.target.value)}>
+            {MODELS.map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="setup-field">
+          <label>API Key</label>
+          <div className="setup-key-row">
+            <input
+              type={showKey ? "text" : "password"}
+              className="text-input"
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              placeholder="Enter your Gemini API key"
+            />
+            <button className="icon-btn" onClick={() => setShowKey(!showKey)} tabIndex={-1}>
+              {showKey ? "🙈" : "👁️"}
+            </button>
+          </div>
+          <p className="setup-hint">
+            Get a free key at{" "}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">
+              aistudio.google.com/apikey
+            </a>
+          </p>
+        </div>
+
+        <button
+          className="primary-btn"
+          disabled={!key.trim()}
+          onClick={() => onSave(key.trim(), model)}
+        >
+          Get Started
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // --- Video Modal ---
 interface VideoModalProps {
@@ -479,7 +556,7 @@ const VideoModal = ({
       titleSize, taglineSize, authorSize, mode
   ]);
 
-  const wrapText = (ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, stroke: boolean = false) => {
+  function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, stroke: boolean = false) {
     const words = text.split(' ');
     let line = '';
     let dy = y;
@@ -659,8 +736,9 @@ const VideoModal = ({
 
 // --- Main App Component ---
 
-const App = () => {
-  const [activeTab, setActiveTab] = useState<'saga' | 'story'>('saga');
+ const App = () => {
+   const [configured, setConfigured] = useState(!!savedKey);
+   const [activeTab, setActiveTab] = useState<'saga' | 'story'>('saga');
   
   // Saga Mode State
   const [bookName, setBookName] = useState("");
@@ -1305,6 +1383,17 @@ const App = () => {
         setVisualsLoading(false);
     }
   };
+
+  const handleSetup = (key: string, model: string) => {
+    localStorage.setItem("saga_api_key", key);
+    localStorage.setItem("saga_model", model);
+    initAI(key);
+    setConfigured(true);
+  };
+
+  if (!configured) {
+    return <SetupScreen onSave={handleSetup} />;
+  }
 
   return (
     <div className="container">
