@@ -330,6 +330,7 @@ const VideoModal = ({
 
   // App State
   const [isRecording, setIsRecording] = useState(false);
+  const [renderComplete, setRenderComplete] = useState(false);
   const [progress, setProgress] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -472,7 +473,11 @@ const VideoModal = ({
          ctx.drawImage(img, cx, cy, img.width * ratio, img.height * ratio);
          ctx.restore();
       } else {
-        ctx.fillStyle = "#1e293b";
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, "#1e293b");
+        grad.addColorStop(0.5, "#334155");
+        grad.addColorStop(1, "#1e293b");
+        ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
       }
 
@@ -581,6 +586,8 @@ const VideoModal = ({
   const startRecording = async () => {
     if (!canvasRef.current || !destRef.current || !audioElRef.current || !audioCtxRef.current) return;
     setIsRecording(true);
+    setRenderComplete(false);
+    setProgress(0);
     setDownloadUrl(null);
     chunksRef.current = [];
     if (audioCtxRef.current.state === 'suspended') await audioCtxRef.current.resume();
@@ -595,6 +602,8 @@ const VideoModal = ({
     const recorder = new MediaRecorder(combinedStream, options);
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     recorder.onstop = () => {
+      setProgress(100);
+      setRenderComplete(true);
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       setDownloadUrl(URL.createObjectURL(blob));
       setIsRecording(false);
@@ -620,7 +629,7 @@ const VideoModal = ({
       <div className="video-modal-content">
         <div className="video-header">
            <h3>{mode === 'saga' ? "Saga Video Studio" : "Story Video Studio"}</h3>
-           <button onClick={onClose} className="close-btn" style={{color:'white'}}>×</button>
+           <button onClick={onClose} className="close-btn">×</button>
         </div>
         
         <div className="video-modal-body">
@@ -628,28 +637,32 @@ const VideoModal = ({
             <div className="preview-section">
                 <div className="canvas-container">
                    <canvas ref={canvasRef} width={1280} height={720} className="preview-canvas" />
-                   {isRecording && (
+                   {(isRecording || renderComplete) && (
                      <div className="recording-overlay">
                        <div className="recording-status">
-                          <div className="spinner"></div>
-                          <h3>Rendering Video...</h3>
+                          {renderComplete ? (
+                            <div className="checkmark">✓</div>
+                          ) : (
+                            <div className="spinner"></div>
+                          )}
+                          <h3>{renderComplete ? "Render Complete!" : "Rendering Video..."}</h3>
                           <div className="progress-bar-container">
                             <div className="progress-bar-fill" style={{width: `${Math.min(progress, 100)}%`}}></div>
                           </div>
                        </div>
                      </div>
-                   )}
+                    )}
                 </div>
                 <div className="video-controls">
                   <label className="checkbox-label">
                     <input type="checkbox" checked={silentRender} onChange={(e) => setSilentRender(e.target.checked)} /> Silent Render
                   </label>
-                  {!isRecording ? (
-                    <>
-                      <button className="secondary-btn" onClick={togglePreview}>{isPlaying ? "⏸" : "▶ Preview"}</button>
-                      <button className="primary-btn small-btn" onClick={startRecording} style={{ background: '#ec4899' }}>⚡ Render Video</button>
-                    </>
-                  ) : <button className="secondary-btn" disabled>Recording...</button>}
+                  <button className="secondary-btn" onClick={togglePreview}>{isPlaying ? "⏸" : "▶ Preview"}</button>
+                  {!isRecording && !renderComplete && (
+                    <button className="primary-btn small-btn" onClick={startRecording} style={{ background: '#ec4899' }}>⚡ Render Video</button>
+                  )}
+                  {isRecording && <button className="secondary-btn" disabled>⏳ Rendering...</button>}
+                  {renderComplete && <button className="primary-btn small-btn" onClick={startRecording} style={{ background: '#22c55e' }}>🔄 Re-Render</button>}
                   {downloadUrl && <a href={downloadUrl} download={getFileName(title, "Video.webm")} className="primary-btn small-btn">⬇ Download</a>}
                 </div>
             </div>
@@ -657,8 +670,9 @@ const VideoModal = ({
             {/* Right: Settings */}
             <div className="settings-panel">
                
-               {/* 1. Background / Cover Art Section */}
-               <h4>{mode === 'saga' ? "Background Art (Concept)" : "Cover Art (Background)"}</h4>
+                {/* 1. Background / Cover Art Section */}
+                <h4>{mode === 'saga' ? "Background Art (Concept)" : "Cover Art (Background)"}</h4>
+                {!bgImageSrc && <p className="bg-hint">No background yet — generate or upload one</p>}
                
                <div className="smart-art-control">
                   <input 
@@ -689,7 +703,7 @@ const VideoModal = ({
                {/* 2. Saga Specific: Overlay (Book Cover) */}
                {mode === 'saga' && (
                    <>
-                       <div style={{width:'100%', height:'1px', background:'#334155', margin:'1rem 0'}}></div>
+                        <div style={{width:'100%', height:'1px', background:'#e2e8f0', margin:'1rem 0'}}></div>
                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                            <h4>Book Cover</h4>
                            <label className="checkbox-label"><input type="checkbox" checked={showCover} onChange={e => setShowCover(e.target.checked)} /> Show</label>
@@ -705,7 +719,7 @@ const VideoModal = ({
                    </>
                )}
 
-               <div style={{width:'100%', height:'1px', background:'#334155', margin:'1rem 0'}}></div>
+               <div style={{width:'100%', height:'1px', background:'#e2e8f0', margin:'1rem 0'}}></div>
 
                {/* 3. Text Controls */}
                <h4>Text Overlays</h4>
